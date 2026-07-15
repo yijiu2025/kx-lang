@@ -4,158 +4,280 @@
 
 **K**nowledge e**X**change · 让 AI 读懂业务，让代码生于架构
 
-[![Version](https://img.shields.io/badge/version-1.2-blue?style=flat-square)](https://github.com/yijiu2025/kx-lang/releases)
-[![Language](https://img.shields.io/badge/DSL-declarative-orange?style=flat-square)](SPEC.md)
-[![AI Native](https://img.shields.io/badge/AI-native-brightgreen?style=flat-square)](README.en.md)
-[![Target](https://img.shields.io/badge/target-Vue_3-42b883?style=flat-square)](https://vuejs.org/)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+<!-- prettier-ignore -->
+[![Version](https://img.shields.io/badge/version-1.2-5B6DEF?style=for-the-badge&logo=bookmark&logoColor=white)](https://github.com/yijiu2025/kx-lang/releases)
+[![AI Native](https://img.shields.io/badge/AI-Native-00D26A?style=for-the-badge&logo=openai&logoColor=white)](SPEC.md#三ai-生成映射表)
+[![Target](https://img.shields.io/badge/Target-Vue_3-42b883?style=for-the-badge&logo=vue.js&logoColor=white)](https://vuejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-E12B89?style=for-the-badge)](LICENSE)
 
-[English](README.en.md) · [中文](README.zh.md)
+[English](README.en.md) · [中文](README.zh.md) · [SPEC.md](SPEC.md) · [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension)
 
 </div>
 
 ---
 
-## 🌐 Language / 语言
-
-- [English](README.en.md)
-- [中文](README.zh.md)
-
----
-
-KX is a lightweight **declarative language** for describing page architecture so that AI can reliably generate Vue 3 code from it. A single `.kx` file captures structure, data flow, interaction, permissions, and business constraints — replacing scattered prompts with a single source of truth.
-
-KX 是一种轻量级**声明式语言**，用 `.kx` 文件描述页面架构，让 AI 能可靠地生成 Vue 3 代码。结构、数据流、交互、权限和业务约束汇聚于一处，取代零散的提示词。
-
----
-
-## ⚡ Quick Start / 快速上手
+```bash
+$ cat home.kx
+```
 
 ```kx
-// .kx — page specification
-@page /discover (发现页) extends AppLayout {
-  @icon SearchOutlined
-  @meta title="发现" description="推荐热门作品与搜索结果"
-
+@page /home (首页) extends AppLayout {
   @slot main {
-    @header 搜索栏 {
-      @input 搜索框 (bind: searchQuery)
-      @action 筛选区 {
-        @button 推荐 { @state tab: string = 'recommend' }
-        @button 最新 { @state tab = 'latest' }
-      }
-    }
-
     @list 作品流 {
-      @api GET /api/v1/works (query: page, keyword: searchQuery, tab: tab) -> works
-      @render when: works.length > 0
+      @api GET /works (query: page, tab) -> works
 
       @card 作品卡片 (v-for: item in works) {
         @prop item: Work
-        @media 封面图 (bind: item.cover_url)
+        @media 封面 (bind: item.cover_url)
         @text 标题 (bind: item.title)
-        @avatar 作者 (bind: item.author.avatar)
 
-        @button 喜欢 {
-          @api POST /api/v1/works/:id/like (body: { workId: item.id })
-          @mutation set works.find(w => w.id === item.id).liked = true
+        @button 点赞 (bind: item.likes_count) {
+          @api POST /works/:id/like
+          @mutation set works.find(w => w.id === id).likes_count += 1
           @login
         }
 
-        @hover -> @popover 作品预览
+        @hover -> @popover 详情预览
       }
-
-      @empty 暂无作品 {
-        @text 没有找到相关作品
-        @button 返回首页 { @navigate click -> / }
-      }
-
-      @loading { @skeleton 卡片骨架 (count: 6) }
     }
   }
 }
 ```
 
-AI generates a complete Vue 3 application from the spec above:
+<div align="center">
 
-| KX 输入 | AI 输出 |
-|:---|:---|
-| `@page /discover (发现页)` | `router/index.ts` 路由 + `HomeView.vue` |
-| `@card 作品卡片 { @prop item: Work … }` | `components/PoseCard.vue` 子组件 |
-| `@api GET /api/v1/works … -> works` | `api/works.ts` 接口封装 |
-| `@button 喜欢 { @mutation … @login }` | 点赞逻辑 + 登录守卫 |
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;☝️&nbsp;&nbsp;一段 `.kx` 描述&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;👇&nbsp;&nbsp;AI 自动生成&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
----
+</div>
 
-## ✨ Core Features / 核心特性
+```bash
+$ ls src/
+  api/works.ts          ← @api 自动封装
+  router/index.ts       ← @page 自动注册
+  views/HomeView.vue    ← @list/@card 模板
+  components/cards/
+    PoseCard.vue         ← @prop/@media/@button 子组件
+  stores/interaction.ts ← @mutation 状态管理
+```
 
-| | Feature | 说明 |
-|:---:|:---|:---|
-| 📐 | **Declarative Structure** | `@page` `@layout` `@slot` 描述页面骨架，层级即语义 |
-| 🔗 | **Data & API Binding** | `@api` `@state` `@param` 声明数据来源与流向 |
-| 🔄 | **State & Mutations** | `@mutation` `@sync` 显式表达状态变更与计算属性 |
-| 🎨 | **23 Component Types** | 从 `@header` 到 `@form`，覆盖布局、内容、交互、反馈 |
-| 🧭 | **Navigation & Events** | `@navigate` `@event` 覆盖路由跳转与 DOM 事件 |
-| 💬 | **Interaction & Feedback** | `@hover` `@popover` `@modal` `@toast` 语义化交互 |
-| 🔒 | **Auth & Permissions** | `@login` `@permission` 声明式权限守卫 |
-| 🤖 | **AI-Native Design** | `@note` 让业务约束对 AI 可见、可执行 |
+<table>
+<tr></tr>
+<tr>
+<td>
 
----
+**你写架构描述，AI 写代码。**
 
-## 📖 Documentation / 文档导航
+`.kx` 文件是页面的单一事实源——结构、数据流、交互、权限、业务规则，汇聚于一处。不再零散提示词，不再反复调试。
 
-| Resource | 说明 |
-|:---|:---|
-| [SPEC.md](SPEC.md) | KX v1.2 语言规范（完整语法 + 生成映射表） |
-| [example.kx](example.kx) | 4 个实战示例（布局 / 首页 / 详情 / 我的） |
-| [README.zh.md](README.zh.md) | 中文完整文档 |
-| [README.en.md](README.en.md) | English complete docs |
-| [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension) | VS Code 语法高亮扩展 |
+</td>
+<td>
 
----
+**You write the blueprint. AI writes the code.**
 
-## 🔗 Related Repositories / 关联仓库
+A `.kx` file is the single source of truth for a page — structure, data flow, interactions, permissions, and business rules in one place. No more scattered prompts, no more guesswork.
 
-- [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension) — VS Code syntax highlighting for `.kx` files
-- [kx-lang](https://github.com/yijiu2025/kx-lang) — specification, examples, and docs (this repository)
+</td>
+</tr>
+</table>
 
 ---
 
-## 🆚 Why KX? / 为什么选择 KX？
+## ⚡ Three Steps / 三步上手
 
-| Aspect | Traditional Development | KX |
+<table>
+<tr></tr>
+<tr>
+<td width="33%">
+
+### 1. 描述页面
+用 `@page` `@list` `@card` 等 23 种语义指令描述页面结构
+</td>
+<td width="33%">
+
+### 2. 投喂给 AI
+将 `.kx` 文件 + `SPEC.md` 放入 Cursor / Claude 上下文
+</td>
+<td width="33%">
+
+### 3. 生成代码
+AI 输出完整 Vue 3 工程：组件、API、路由、Store
+</td>
+</tr>
+</table>
+
+---
+
+## 📊 Before vs After / 对比
+
+<table>
+<tr></tr>
+<tr>
+<th width="50%">❌ 传统方式</th>
+<th width="50%">✅ KX 方式</th>
+</tr>
+<tr>
+<td>
+
+```
+"帮我写一个作品瀑布流页面，
+要有分页、搜索、点赞功能，
+点赞要乐观更新..."
+
+→ AI 猜测结构 → 一次次的调试 → 细节遗漏
+```
+
+</td>
+<td>
+
+```kx
+@card 作品卡片 (v-for: item in works) {
+  @button 点赞 {
+    @api POST /works/:id/like
+    @mutation set works.find(w => w.id === id).liked = true
+    @login
+  }
+}
+
+→ 精确 → 一次成功 → 细节完整
+```
+
+</td>
+</tr>
+</table>
+
+---
+
+## ✨ 核心特性 / Features
+
+<table>
+<tr></tr>
+<tr>
+<td width="50%">
+
+📐 **块级语义**
+23 种指令覆盖布局、内容、交互、反馈四大类
+
+🔗 **数据驱动**
+`@api` + `@mutation` + `@sync` 让数据流清晰可见
+
+🎨 **交互一等公民**
+`@hover` 双模式、`@popover`、`@position`、`@delay`
+
+🔒 **安全内建**
+`@login` 三模式守卫 + `@permission` 权限控制
+
+🤖 **AI 原生**
+`@note` 让业务约束对 AI 强制执行
+
+</td>
+<td width="50%">
+
+📐 **Block-level Semantics**
+23 directives across layout, content, interaction, feedback
+
+🔗 **Data-driven**
+`@api` + `@mutation` + `@sync` for visible data flow
+
+🎨 **Interaction First**
+`@hover` dual mode, `@popover`, `@position`, `@delay`
+
+🔒 **Secure by Default**
+`@login` three-mode guard + `@permission` control
+
+🤖 **AI Native**
+`@note` enforces business constraints on AI
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🛠️ 技术栈 / Tech Stack
+
+```
+KX Specification     → SPEC.md (this repo)
+VS Code Highlighting → kx-lang-extension
+Real-world Usage     → PoseCraft (production example)
+```
+
+---
+
+## 📖 Documentation / 文档
+
+| 文件 | 说明 | Description |
 |:---|:---|:---|
-| Page definition | Hand-written Vue SFCs | Declaring intent in `.kx` |
-| AI collaboration | Ad-hoc prompts | Structured, parseable spec |
-| Business logic | Scattered in组件 code | Centralized via `@note` |
-| State management | Imperative mutations | Declarative `@mutation` |
-| Component choice | Manual coding | 23 semantic directives |
-| Maintenance | Code review per change | Update spec, regenerate |
+| [SPEC.md](SPEC.md) | 完整语法规范 + AI 生成映射表 | Full spec + AI mapping table |
+| [example.kx](example.kx) | 4 个实战场景示例 | 4 real-world examples |
+| [README.zh.md](README.zh.md) | 中文完整文档 | Chinese complete docs |
+| [README.en.md](README.en.md) | English complete docs | English complete docs |
 
 ---
 
-## 📋 Roadmap / 路线图
+## 🔗 关联仓库 / Related Repos
 
-- [x] **v1.0** — 基础指令集：`@page` `@slot` `@button` `@api` `@navigate`
-- [x] **v1.1** — 新增 `@mutation` `@sync` `@render` `@state` `@prop` `@param`
-- [x] **v1.2** — 新增 `@hover` `@leave` `@anchor` `@position` `@delay` `@permission` `@login` `@event` `@form`；扩展组件至 23 种
-- [ ] **v2.0** — 服务端函数 `@server`、WebSocket `@ws`、图形绑定 `@graph`、自定义指令扩展
-- [ ] **v2.1** — 多端适配 `@platform`、AI 辅助生成器 `@ai`、设计稿互转 `@pen`
-
----
-
-## 🤝 Contributing / 参与贡献
-
-欢迎提交 Issue 或 PR：
-
-Welcome contributions of all kinds:
-
-- 完善 `.kx` 写法和示例 / Improve `.kx` examples and patterns
-- 增强语法支持 / Enhance syntax coverage in `kx-lang-extension`
-- 优化文档与规范 / Refine documentation and the KX specification
+| 仓库 | 说明 |
+|:---|:---|
+| [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension) | VS Code 语法高亮扩展 |
+| [PoseCraft](https://github.com/yijiu2025/CoreFlow/tree/main/posecraft) | KX 在大型项目中的生产级应用 |
 
 ---
 
-## 📄 License / 许可证
+## 📋 路线图 / Roadmap
+
+<table>
+<tr></tr>
+<tr>
+<td>
+
+**已完成**
+- [x] v1.0 — 基础指令
+- [x] v1.1 — 数据流 + 状态
+- [x] v1.2 — 悬浮交互 + 权限 + @note
+
+</td>
+<td>
+
+**进行中**
+- [ ] v2.0 — 服务端函数 `@server`、WebSocket `@ws`
+- [ ] v2.1 — 多端适配、AI 生成器集成
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🤝 参与贡献 / Contributing
+
+欢迎任何形式的贡献：
+
+- 📝 完善 KX 规范或新增示例
+- 🎨 增强 `kx-lang-extension` 语法支持
+- 📖 优化文档与写作指南
+- 🐛 提交 Issue 或 PR
+
+---
+
+<div align="center">
+
+## 🚀 现在开始 / Get Started
+
+```bash
+# 1. 安装语法高亮
+code --install-extension kx-lang-extension/kx-lang-extension-0.0.1.vsix
+
+# 2. 阅读规范
+open SPEC.md
+
+# 3. 开始编写你的第一个 .kx 文件
+touch my-page.kx
+```
+
+<sub>如果觉得有用，请给个 ⭐ 支持一下！ · If this helps, a ⭐ is appreciated!</sub>
+
+<br/>
 
 [MIT](LICENSE) · Copyright (c) 2025 KX Language Contributors
+
+</div>
