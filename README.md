@@ -1,42 +1,38 @@
-﻿<div align="center">
+<div align="center">
 
-# KX — 页面描述语言
+# KX — Page Definition Language
 
 **K**nowledge e**X**change · 让 AI 读懂业务，让代码生于架构
 
-[![Version](https://img.shields.io/badge/version-1.2-blue?style=flat-square)]()
-[![Language](https://img.shields.io/badge/DSL-Declarative-orange?style=flat-square)]()
-[![AI Native](https://img.shields.io/badge/AI-Native-brightgreen?style=flat-square)]()
+[![Version](https://img.shields.io/badge/version-1.2-blue?style=flat-square)](https://github.com/yijiu2025/kx-lang/releases)
+[![Language](https://img.shields.io/badge/DSL-declarative-orange?style=flat-square)](SPEC.md)
+[![AI Native](https://img.shields.io/badge/AI-native-brightgreen?style=flat-square)](README.en.md)
 [![Target](https://img.shields.io/badge/target-Vue_3-42b883?style=flat-square)](https://vuejs.org/)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)]()
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-[文档](SPEC.md) · [示例](example.kx) · [扩展](kx-lang-extension) · [贡献](#参与贡献)
+[English](README.en.md) · [中文](README.zh.md)
 
 </div>
 
 ---
 
-## 这是什么？
+## 🌐 Language / 语言
 
-**KX** 是一种专为 AI 驱动前端构建设计的声明式页面描述语言。
-
-用 `.kx` 文件描述页面结构、数据流、交互逻辑、权限和业务规则，AI 可以自动生成 Vue 3 代码。
-
----
-
-## 你能用它做什么
-
-- 用一份 `.kx` 文件表达页面布局和互动。
-- 用 `@api` 定义接口，用 `@mutation` 明确状态更新。
-- 用 `@note` 写业务约束，让模型精准理解。
-- 用 `@login` / `@permission` 定义访问控制。
-- 用 `@hover` / `@popover` 描述复杂悬浮交互。
+- [English](README.en.md)
+- [中文](README.zh.md)
 
 ---
 
-## 快速上手
+KX is a lightweight **declarative language** for describing page architecture so that AI can reliably generate Vue 3 code from it. A single `.kx` file captures structure, data flow, interaction, permissions, and business constraints — replacing scattered prompts with a single source of truth.
+
+KX 是一种轻量级**声明式语言**，用 `.kx` 文件描述页面架构，让 AI 能可靠地生成 Vue 3 代码。结构、数据流、交互、权限和业务约束汇聚于一处，取代零散的提示词。
+
+---
+
+## ⚡ Quick Start / 快速上手
 
 ```kx
+// .kx — page specification
 @page /discover (发现页) extends AppLayout {
   @icon SearchOutlined
   @meta title="发现" description="推荐热门作品与搜索结果"
@@ -80,102 +76,86 @@
 }
 ```
 
----
+AI generates a complete Vue 3 application from the spec above:
 
-## 写作规则
-
-### 1. 结构清晰
-
-- 使用 `@<类型> <名称> { ... }` 进行块级组织。
-- 每个 `.kx` 文件应聚焦一个页面或一个独立模块。
-- 避免将多个页面写在同一个文件中。
-
-### 2. 业务说明要用 `@note`
-
-`@note` 是 AI 识别业务约束的关键：
-
-- `@note 仅 VIP 用户可见`
-- `@note 点击后上报埋点 submit_click`
-- `@note 搜索时支持联想提示`
-
-### 3. 数据与状态显式
-
-- `@prop item: Work`
-- `@state page: number = 1`
-- `@param id: string { from: route }`
-- `@api GET /path -> state`
-- `@mutation` 说明本地变更
-
-### 4. 交互要明确
-
-- `@navigate click -> /detail`
-- `@render when: loading`
-- `@hover -> @popover`
-- `@hover { @state show = true @delay show: 200ms }`
-- `@leave { @state show = false }`
-
-### 5. 与扩展语法保持一致
-
-本仓库的 `kx-lang-extension` 已支持以下指令：
-
-- `@page`, `@layout`, `@slot`
-- `@api`, `@navigate`, `@render`, `@permission`, `@login`
-- `@state`, `@prop`, `@param`, `@mutation`, `@event`
-- `@hover`, `@popover`, `@anchor`, `@position`
-- `@note`, `@toast`, `@empty`, `@skeleton`
+| KX 输入 | AI 输出 |
+|:---|:---|
+| `@page /discover (发现页)` | `router/index.ts` 路由 + `HomeView.vue` |
+| `@card 作品卡片 { @prop item: Work … }` | `components/PoseCard.vue` 子组件 |
+| `@api GET /api/v1/works … -> works` | `api/works.ts` 接口封装 |
+| `@button 喜欢 { @mutation … @login }` | 点赞逻辑 + 登录守卫 |
 
 ---
 
-## 项目结构
+## ✨ Core Features / 核心特性
 
-```
-.
-├── SPEC.md
-├── README.md
-├── app.kx
-├── example.kx
-└── kx-lang-extension/
-    ├── package.json
-    ├── syntaxes/kx.tmLanguage.json
-    └── ...
-```
-
----
-
-## 扩展同步说明
-
-`kx-lang-extension` 语法高亮已覆盖 `.kx` 关键语法，可直接用于编写和阅读页面架构。
+| | Feature | 说明 |
+|:---:|:---|:---|
+| 📐 | **Declarative Structure** | `@page` `@layout` `@slot` 描述页面骨架，层级即语义 |
+| 🔗 | **Data & API Binding** | `@api` `@state` `@param` 声明数据来源与流向 |
+| 🔄 | **State & Mutations** | `@mutation` `@sync` 显式表达状态变更与计算属性 |
+| 🎨 | **23 Component Types** | 从 `@header` 到 `@form`，覆盖布局、内容、交互、反馈 |
+| 🧭 | **Navigation & Events** | `@navigate` `@event` 覆盖路由跳转与 DOM 事件 |
+| 💬 | **Interaction & Feedback** | `@hover` `@popover` `@modal` `@toast` 语义化交互 |
+| 🔒 | **Auth & Permissions** | `@login` `@permission` 声明式权限守卫 |
+| 🤖 | **AI-Native Design** | `@note` 让业务约束对 AI 可见、可执行 |
 
 ---
 
-## 发布扩展
+## 📖 Documentation / 文档导航
 
-1. 设置 `kx-lang-extension/package.json` 中的 `publisher`
-2. 安装发布工具：
-
-```bash
-npm install -g @vscode/vsce
-```
-
-3. 打包并发布：
-
-```bash
-cd kx-lang-extension
-npx @vscode/vsce package
-npx @vscode/vsce publish
-```
-
-> 发布前请确认 `SPEC.md`、`README.md`、`app.kx`、`example.kx` 已完成同步。
+| Resource | 说明 |
+|:---|:---|
+| [SPEC.md](SPEC.md) | KX v1.2 语言规范（完整语法 + 生成映射表） |
+| [example.kx](example.kx) | 4 个实战示例（布局 / 首页 / 详情 / 我的） |
+| [README.zh.md](README.zh.md) | 中文完整文档 |
+| [README.en.md](README.en.md) | English complete docs |
+| [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension) | VS Code 语法高亮扩展 |
 
 ---
 
-## 参与贡献
+## 🔗 Related Repositories / 关联仓库
 
-欢迎提交 Issues 或 PR：
-
-- 扩展新的 `@` 指令
-- 丰富 `.kx` 示例
-- 优化语法高亮、配色和文档
-- 细化写作规则与最佳实践
+- [kx-lang-extension](https://github.com/yijiu2025/kx-lang-extension) — VS Code syntax highlighting for `.kx` files
+- [kx-lang](https://github.com/yijiu2025/kx-lang) — specification, examples, and docs (this repository)
 
 ---
+
+## 🆚 Why KX? / 为什么选择 KX？
+
+| Aspect | Traditional Development | KX |
+|:---|:---|:---|
+| Page definition | Hand-written Vue SFCs | Declaring intent in `.kx` |
+| AI collaboration | Ad-hoc prompts | Structured, parseable spec |
+| Business logic | Scattered in组件 code | Centralized via `@note` |
+| State management | Imperative mutations | Declarative `@mutation` |
+| Component choice | Manual coding | 23 semantic directives |
+| Maintenance | Code review per change | Update spec, regenerate |
+
+---
+
+## 📋 Roadmap / 路线图
+
+- [x] **v1.0** — 基础指令集：`@page` `@slot` `@button` `@api` `@navigate`
+- [x] **v1.1** — 新增 `@mutation` `@sync` `@render` `@state` `@prop` `@param`
+- [x] **v1.2** — 新增 `@hover` `@leave` `@anchor` `@position` `@delay` `@permission` `@login` `@event` `@form`；扩展组件至 23 种
+- [ ] **v2.0** — 服务端函数 `@server`、WebSocket `@ws`、图形绑定 `@graph`、自定义指令扩展
+- [ ] **v2.1** — 多端适配 `@platform`、AI 辅助生成器 `@ai`、设计稿互转 `@pen`
+
+---
+
+## 🤝 Contributing / 参与贡献
+
+欢迎提交 Issue 或 PR：
+
+Welcome contributions of all kinds:
+
+- 完善 `.kx` 写法和示例 / Improve `.kx` examples and patterns
+- 增强语法支持 / Enhance syntax coverage in `kx-lang-extension`
+- 优化文档与规范 / Refine documentation and the KX specification
+
+---
+
+## 📄 License / 许可证
+
+[MIT](LICENSE) · Copyright (c) 2025 KX Language Contributors
