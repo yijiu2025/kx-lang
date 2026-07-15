@@ -1,0 +1,85 @@
+﻿@page /mine (我的空间) extends PosecraftLayout {
+  @icon UserOutlined
+  @meta title="我的空间" description="个人资料与作品管理"
+
+  @slot main {
+    @header 个人信息区域 {
+      @avatar 头像 (bind: user.avatar)
+      @text 用户名 (bind: user.username)
+      @stat 粉丝 (bind: user.followersCount)
+      @stat 关注 (bind: user.followingCount)
+      @button 编辑资料 {
+        @login
+        @modal 编辑资料弹窗 {
+          @input 昵称 (bind: editForm.username)
+          @input 简介 (bind: editForm.bio)
+          @button 保存 {
+            @api PUT /user/v1/update (body: { username: editForm.username, bio: editForm.bio })
+            @toast "保存成功"
+            @mutation set user.username = editForm.username
+            @mutation set user.bio = editForm.bio
+          }
+        }
+      }
+    }
+
+    @list 作品列表 {
+      @api GET /posecraft/v1/works/mine (query: page, pageSize) -> works
+      @render when: works.length > 0
+
+      @card 作品卡片 (v-for: item in works) {
+        @prop item: Work
+        @media 封面图 (bind: item.cover_url)
+        @text 标题 (bind: item.title)
+        @badge 发布中 { @render when: item.status === 'published' }
+        @badge 私密 { @render when: item.status === 'private' }
+
+        @action 操作栏 {
+          @button 编辑 {
+            @navigate click -> /editor?id={item.id}
+          }
+          @button 删除 {
+            @modal 删除确认 {
+              @text 确认删除作品？
+              @button 确定 {
+                @api DELETE /posecraft/v1/works/:id (body: { id: item.id })
+                @mutation filter works = works.filter(w => w.id !== item.id)
+                @toast "已删除"
+              }
+              @button 取消
+            }
+          }
+        }
+
+        @hover -> @popover 作品预览
+      }
+
+      @popover 作品预览 {
+        @render when: show
+        @anchor @card 作品卡片
+        @text 简介 (bind: item.summary)
+        @media 预览图 (bind: item.preview_url)
+        @button 查看详情 {
+          @navigate click -> /work/{item.id}
+        }
+      }
+
+      @empty 空状态 {
+        @text 你还没有作品，快去创作第一件吧！
+        @button 立即投稿 { @navigate click -> /editor }
+      }
+
+      @loading {
+        @skeleton 卡片骨架 (count: 5)
+      }
+    }
+
+    @section 侧边信息 {
+      @note 展示用户积分、收藏和待办事项。
+      @card 统计卡片 {
+        @stat 收藏 (bind: user.collectCount)
+        @stat 草稿 (bind: user.draftCount)
+      }
+    }
+  }
+}

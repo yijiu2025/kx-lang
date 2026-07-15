@@ -1,0 +1,436 @@
+# ==================== 编辑器页面 ====================
+#
+# 基于源码: posecraft/src/views/EditorView.vue
+#
+# Fabric.js 画布编辑器：AI 姿势分析 + 图片编辑 + 模板保存
+# 核心 composables: useCanvasInit, useHistory, useTools, useShapes,
+#   useReferenceLines, useSkeletonNodes, useImageUpload, useAIAnalysis,
+#   useMouseEvents, useText, useKeyboard, useCanvasProperties, useCanvasSelection
+#
+# 页面结构：
+#   TopBar（顶部工具栏：退出/撤销/重做/帮助/保存）
+#   + 主工作区：LeftToolbar | CanvasArea | RightPanel
+#   + 浮动面板：ColorFloatPanel / StyleFloatPanel
+#   + Modal：ExitModal / SaveModal / HelpModal
+#
+# 关键交互：
+#   - 从 URL ?id=xxx 加载已有模板编辑
+#   - EXIF 解析：parseImageExif() 提取拍摄坐标/相机参数
+#   - 骨架拖拽：mouse:down 锁定关联线条，object:moving 同步更新
+#   - 参考线：三分法/黄金比例/中心线
+#   - 撤销/重做：historyStore 管理 undo/redo 栈
+#   - 保存流程：SaveModal 填写名称/坐标 → POST /templates
+#   - 退出确认：未保存时 ExitModal 二次确认
+#   - @permission posecraft:work:create + @login
+
+@page /editor (编辑器) extends PosecraftLayout {
+  @icon EditOutlined
+  @meta title="模板编辑器"
+
+  @permission posecraft:work:create
+  @login
+
+  @slot main {
+    @detail 编辑器 {
+      // ========== 路由参数：加载已有模板 ==========
+      @param id: string { from: query }
+      @note 如果 URL 带 ?id=xxx，加载已有模板进行编辑
+      @api GET /posecraft/v1/templates/:id (bind: id) -> templateData
+      @note 获取 fabricData 渲染到画布，进入编辑模式
+
+      // ========== 顶部工具栏 ==========
+      // 来源: layouts/editor/TopBar.vue
+      @header 顶部栏 {
+        @button 退出 {
+          @note 未保存时弹出 ExitModal 确认框
+          @modal 确认退出 {
+            @text 尚未保存，确定离开吗？
+            @button 确定 { @navigate success -> / }
+            @button 取消
+          }
+        }
+        @button 撤销 {
+          @note 调用 historyStore.undo()
+          @note 快捷键: Ctrl+Z
+          @render when: historyStore.canUndo
+        }
+        @button 重做 {
+          @note 调用 historyStore.redo()
+          @note 快捷键: Ctrl+Shift+Z 或 Ctrl+Y
+          @render when: historyStore.canRedo
+        }
+        @button 帮助 {
+          @note 显示快捷键说明 HelpModal
+          @modal 帮助弹窗 {
+            @note 键盘快捷键列表 + 操作指南
+          }
+        }
+        @button 保存 {
+          @note 打开 SaveModal 填写信息
+          @modal 保存弹窗 {
+            @input 模板名称 (bind: canvasStore.templateName)
+            @input 拍摄坐标 {
+              @note 自动从图片 EXIF 提取 (parseImageExif)
+              @input 纬度
+              @input 经度
+            }
+            @input 相机参数 {
+              @note EXIF: 相机型号/镜头/光圈/快门/ISO
+            }
+            @button 确认保存 {
+              @api POST /posecraft/v1/templates (body: {
+                title, description, category, image_url,
+                pose_data: { fabricData, vw, vh }
+              })
+              @permission posecraft:work:create
+              @navigate success -> /
+              @note 保存为新模板，成功跳转首页并 toast 提示
+            }
+            @button 取消
+          }
+        }
+      }
+
+      // ========== 主编辑器工作区 ==========
+      // 三栏布局：LeftToolbar(80px) | CanvasArea(flex) | RightPanel(280px)
+      @detail 工作区 {
+
+        // ---------- 左侧工具栏 ----------
+        // 来源: layouts/editor/LeftToolbar.vue
+        @sidebar 左侧工具栏 {
+          @note 工具切换：选择/画笔/橡皮/文字/形状/裁剪/AI分析
+          @note 激活态红色高亮
+
+          @button 选择工具 {
+            @state activeTool: string = 'select'
+            @note 快捷键: V
+            @note 选择/移动/缩放画布对象
+            @note 支持多选（Shift+Click）+ 框选
+          }
+          @button 画笔工具 {
+            @state activeTool = 'draw'
+            @note 快捷键: B
+            @note 自由绘制路径
+            @note 可调：笔触宽度/模糊度/缩放/颜色
+          }
+          @button 橡皮擦 {
+            @state activeTool = 'eraser'
+            @note 快捷键: E
+            @note 擦除画布内容
+          }
+          @button 文字工具 {
+            @state activeTool = 'text'
+            @note 快捷键: T
+            @note 添加文字对象
+            @note 可调：字体/大小/颜色/加粗/斜体/对齐
+          }
+          @button 形状工具 {
+            @state activeTool = 'shapes'
+            @note 快捷键: S
+            @note 子形状：矩形/圆形/直线/箭头/星形/多边形
+            @note 使用 useShapes composable
+          }
+          @button 裁剪工具 {
+            @state activeTool = 'crop'
+            @note 快捷键: C
+            @note 进入裁剪模式
+            @note 可调比例：自由/1:1/4:3/16:9
+          }
+          @button AI分析 {
+            @state activeTool = 'ai'
+            @note 快捷键: A
+            @note TensorFlow.js 自动识别
+            @note 带 analyzing loading 状态
+            @api POST /posecraft/v1/analysis
+          }
+          @button 清除画布 {
+            @note 清空所有对象（需确认）
+            @modal 确认清空 { @note "确定清空画布吗？此操作不可撤销" }
+          }
+
+          // 颜色快捷切换
+          @button 当前颜色 {
+            @note 点击展开 ColorFloatPanel
+            @state showColorPanel: boolean = false
+          }
+          @button 笔触样式 {
+            @note 点击展开 StyleFloatPanel
+            @state showStylePanel: boolean = false
+          }
+        }
+
+        // ---------- 中间画布区 ----------
+        // 来源: layouts/editor/CanvasArea.vue
+        @media 画布区域 {
+          @note Fabric.js Canvas 主画布
+          @note 全屏自适应，支持滚轮缩放
+          @note 设计稿比例锁定（从 templateData.vw/vh 计算）
+
+          // 画布初始化
+          @api GET /posecraft/v1/templates/:id (bind: id) -> templateData
+          @note 加载模板时获取 fabricData 渲染到画布
+          @note useCanvasInit composable 初始化 fCanvas 实例
+
+          // 上传图片背景
+          @button 上传图片 {
+            @api POST /posecraft/v1/upload (formData: file)
+            @note 支持拖拽上传 / 点击上传
+            @note 上传进度条 (onUploadProgress)
+            @note 上传后自动解析 EXIF (parseImageExif)
+            @note 提取：拍摄坐标 (GPS经纬度) + 相机参数
+          }
+
+          // 图片拖拽
+          @button 拖拽图片 {
+            @note 从文件系统拖拽图片到画布
+            @note 自动设为背景并适应画布尺寸
+          }
+
+          // 缩放控制
+          @action 缩放控制 {
+            @button 放大 {
+              @note zoomIn() — 步进 10%
+              @note 快捷键: Ctrl++
+            }
+            @button 缩小 {
+              @note zoomOut() — 步进 10%
+              @note 快捷键: Ctrl+-
+            }
+            @button 重置缩放 {
+              @note resetZoom() — 恢复 100%
+            }
+            @button 适应屏幕 {
+              @note fitToScreen() — 自动缩放适应视口
+            }
+            @text 缩放比例 (bind: canvasStore.zoom)
+            @note 显示当前缩放百分比
+          }
+
+          // 背景控制
+          @button 替换背景图片 {
+            @api POST /posecraft/v1/upload (formData: file)
+            @note 替换当前背景图片
+          }
+          @input 背景透明度 {
+            @note updateBgOpacity() — 调整背景图不透明度
+            @note 范围 0-1
+          }
+
+          // 参考线
+          @button 参考线 {
+            @note 三分法 / 黄金比例 / 中心线
+            @state showGuides: boolean = false
+            @note 快捷键: Ctrl+;
+            @note 辅助构图对齐
+          }
+
+          // 画布属性
+          @action 画布属性 {
+            @input 画布宽度 (bind: canvasStore.width)
+            @input 画布高度 (bind: canvasStore.height)
+            @input 背景颜色 (bind: canvasStore.bgColor)
+            @note useCanvasProperties composable
+          }
+
+          // 选中对象操作
+          // 来源: useCanvasSelection composable
+          @action 选中操作 {
+            @render when: canvasStore.hasSelection
+            @button 删除选中 {
+              @note 删除当前选中对象
+              @note 快捷键: Delete / Backspace
+            }
+            @button 复制 {
+              @note 复制选中对象到剪贴板
+              @note 快捷键: Ctrl+C
+            }
+            @button 粘贴 {
+              @note 从剪贴板粘贴
+              @note 快捷键: Ctrl+V
+            }
+            @button 置于顶层 {
+              @note bringToFront()
+            }
+            @button 置于底层 {
+              @note sendToBack()
+            }
+            @button 上移一层 {
+              @note moveUp()
+            }
+            @button 下移一层 {
+              @note moveDown()
+            }
+          }
+
+          // 骨架节点拖拽
+          // 来源: useSkeletonNodes composable
+          @detail 骨架编辑 {
+            @render when: canvasStore.hasSkeleton
+            @note 骨骼节点 + 连接线 (line + circle)
+            @note 拖拽节点时关联线条自动更新
+
+            @button 骨架节点 {
+              @note mouse:down 用 connectedLines 锁定关联线条
+              @note object:moving 同步更新线条两个端点
+              @note 支持 isAutoGenerated 线条的近端自动吸附（< 20px 阈值）
+              @note 使用 line._setWidthHeight() + setCoords() 更新
+            }
+          }
+        }
+
+        // ---------- 右侧多功能属性面板 ----------
+        // 来源: layouts/editor/RightPanel.vue
+        // 根据 activeTool 切换不同子面板（14 种面板）
+        @author 右侧面板 {
+          @note 面板映射：
+          @note select → SelectPanel | draw → ColorPanel
+          @note eraser → ColorPanel | text → TextPanel
+          @note shapes → ShapesPanel | crop → CropPanel
+          @note ai → AiPanel | hand → HandPanel
+          @note image → ImagePanel | markup → MarkupPanel
+          @note style → StyleFloatPanel | color → ColorFloatPanel
+          @note panel → PanelSection
+
+          // --- 画笔/橡皮属性 ---
+          @tab 画笔面板 {
+            @render when: activeTool === 'draw' || activeTool === 'eraser'
+            @input 笔触颜色 (bind: toolStore.currentColor)
+            @input 填充颜色 (bind: toolStore.fillColor)
+            @switch 无填充 (bind: toolStore.noFill)
+            @input 笔触宽度 (bind: toolStore.strokeWidth)
+            @input 笔触透明度 (bind: toolStore.strokeOpacity)
+          }
+
+          // --- 文字属性 ---
+          @tab 文字面板 {
+            @render when: activeTool === 'text'
+            @input 字体大小 (bind: textFontSize)
+            @input 字体族 (bind: textFontFamily)
+            @input 行高 (bind: textLineHeight)
+            @input 字间距 (bind: textLetterSpacing)
+            @switch 加粗 (bind: textBold)
+            @switch 斜体 (bind: textItalic)
+            @switch 下划线 (bind: textUnderline)
+            @switch 删除线 (bind: textStrikethrough)
+            @button 对齐方式 (bind: textAlign)
+            @note 左/中/右/两端对齐
+          }
+
+          // --- 形状属性 ---
+          @tab 形状面板 {
+            @render when: activeTool === 'shapes'
+            @button 矩形
+            @button 圆形
+            @button 直线
+            @button 箭头
+            @button 星形 {
+              @note 可调：顶点数/内半径/外半径
+            }
+            @button 多边形 {
+              @note 可调：边数
+            }
+            @input 填充颜色
+            @input 描边颜色
+            @input 描边宽度
+            @switch 圆角 (bind: toolStore.cornerRadius)
+          }
+
+          // --- AI 分析面板 ---
+          @tab AI分析面板 {
+            @render when: activeTool === 'ai'
+            @button 姿势检测 {
+              @note TensorFlow.js MoveNet — 识别人体 17 个关键点
+              @note 模型: movenet_lightning / movenet_thunder
+              @api POST /posecraft/v1/analysis (body: {
+                analysis_type: 'pose',
+                image_url, result_data
+              })
+            }
+            @button 面部识别 {
+              @note FaceMesh — 识别 468 个面部特征点
+              @note 模型: face_detector + face_landmark
+            }
+            @button 手部追踪 {
+              @note HandPose — 每只手 21 个关键点
+              @note 模型: hand_detector + hand_landmark
+              @note 支持双手检测
+            }
+            @button 人体分割 {
+              @note BodySegmentation — 分离人像与背景
+              @note 模型: selfie_segmentation
+              @note 可用于背景虚化/替换
+            }
+            @button 清除分析 {
+              @note 清除画布上的骨架叠加
+            }
+            @button 自动分析 {
+              @note 一键执行全部 AI 检测并渲染骨架
+              @note 依次执行：姿势 → 面部 → 手部 → 分割
+            }
+
+            // 骨架显示控制
+            @switch 显示骨骼 (bind: canvasStore.showSkeleton)
+            @input 骨骼线条宽度
+            @input 骨骼节点半径
+          }
+
+          // --- 选择工具属性 ---
+          @tab 选择面板 {
+            @render when: activeTool === 'select'
+            @button 删除选中
+            @button 复制
+            @button 粘贴
+            @button 全选 {
+              @note 快捷键: Ctrl+A
+            }
+            @button 取消选择 {
+              @note 快捷键: Escape
+            }
+          }
+
+          // --- 裁剪属性 ---
+          @tab 裁剪面板 {
+            @render when: activeTool === 'crop'
+            @button 确认裁剪
+            @button 取消裁剪
+            @input 裁剪比例 {
+              @note 自由 / 1:1 / 4:3 / 16:9
+              @note 使用 useCanvasProperties.updateCropAspectRatio
+            }
+          }
+        }
+
+        // ---------- 颜色浮动面板 ----------
+        @popover 颜色选择器 {
+          @render when: showColorPanel
+          @note 来源: ColorFloatPanel.vue
+          @note 当前色/填充色/预设色板(12色)/无填充开关
+          @input 当前颜色 (bind: toolStore.currentColor)
+          @input 填充颜色 (bind: toolStore.fillColor)
+          @switch 无填充 (bind: toolStore.noFill)
+        }
+
+        // ---------- 样式浮动面板 ----------
+        @popover 样式选择器 {
+          @render when: showStylePanel
+          @note 来源: StyleFloatPanel.vue
+          @input 描边宽度 (bind: toolStore.strokeWidth)
+          @input 描边透明度 (bind: toolStore.strokeOpacity)
+          @input 填充透明度 (bind: toolStore.fillOpacity)
+          @input 圆角半径 (bind: toolStore.cornerRadius)
+          @input 线条样式 (bind: toolStore.lineStyle)
+          @note 实线/虚线/点线
+        }
+
+        // ---------- 裁剪模式覆盖层 ----------
+        @detail 裁剪模式 {
+          @render when: isCropping
+          @note 全屏遮罩 + 裁剪框
+          @button 确认裁剪
+          @button 取消裁剪
+          @input 裁剪比例
+        }
+      }
+    }
+  }
+}

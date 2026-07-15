@@ -1,0 +1,180 @@
+# ==================== 关注 / 朋友页面 ====================
+#
+# 基于源码: posecraft/src/views/home/FollowingView.vue
+#          posecraft/src/views/home/FriendsView.vue
+#
+# 两个页面结构相同：
+#   顶部无 SearchHero，直接展示瀑布流
+#   关注页受 @login 守卫保护（requiresAuth: true）
+#
+# 关键交互：
+#   - 关注页：展示当前用户关注的人的作品
+#   - 朋友页：展示朋友的作品动态
+#   - 关注页可取消关注（按钮切换）
+#   - 两个页面都支持加载更多（IntersectionObserver）
+#   - 空状态引导用户去发现更多创作者
+
+# ---------- 我的关注 ----------
+
+@page /following (我的关注) extends PosecraftLayout {
+  @icon HeartOutlined
+  @meta title="我的关注"
+
+  @login
+  @note 路由守卫：requiresAuth = true
+  @note 未登录跳转 /login?redirect=/following
+
+  @slot main {
+    @list 关注动态流 {
+      @api GET /posecraft/v1/works/following (query: page, pageSize) -> works
+      @note 获取当前用户关注的人的作品
+      @note 按发布时间倒序排列
+
+      @loading {
+        @skeleton 卡片骨架 (count: 8)
+      }
+
+      @empty {
+        @empty 空状态 {
+          @icon ❤️
+          @text 还没有关注任何人
+          @note 去发现更多创作者，关注后查看他们的最新作品
+          @button 去发现 {
+            @navigate click -> /recommend
+          }
+          @button 去精选 {
+            @navigate click -> /featured
+          }
+        }
+      }
+
+      @card 作品卡片 (v-for: item in works) {
+        @prop item: Work
+
+        @media 封面 (bind: item.cover_url) {
+          @note 图片懒加载
+        }
+        @text 标题 (bind: item.title)
+
+        // 作者信息（带关注操作）
+        @author 作者信息 {
+          @avatar 头像 (bind: item.author.avatar) {
+            @navigate click -> /user/:id
+          }
+          @text 作者名 (bind: item.author.username)
+
+          // 关注/取关切换
+          @button 已关注 {
+            @api DELETE /posecraft/v1/follow/:userId (bind: item.author.id)
+            @api GET /posecraft/v1/follow/status/:userId -> isFollowing
+            @login
+            @note 取消关注后从列表移除该作者全部作品
+            @note hover 时变红色"取消关注"提示
+          }
+          // 已关注用户 hover 显示"取消关注"
+          @button 取消关注 {
+            @note hover 态切换
+            @api DELETE /posecraft/v1/follow/:userId (bind: item.author.id)
+            @mutation remove works.filter(w => w.author.id === item.author.id)
+          }
+        }
+
+        @action 操作栏 {
+          @button 点赞 (bind: item.likes_count) {
+            @api POST /posecraft/v1/works/:id/like
+            @api POST /posecraft/v1/interaction/like
+            @mutation set works.find(w => w.id === id).likes_count += 1
+            @login
+          }
+          @button 收藏 {
+            @api POST /posecraft/v1/interaction/collect
+            @login
+          }
+          @button 评论 {
+            @navigate click -> /work/:id#comment
+          }
+        }
+
+        @navigate click -> /work/:id
+      }
+
+      @button 加载更多 {
+        @api GET /posecraft/v1/works/following (page: nextPage) -> works(append)
+        @render when: hasMore
+        @note IntersectionObserver 自动触发
+      }
+
+      @text 没有更多了 {
+        @render when: !hasMore && works.length > 0
+      }
+    }
+  }
+}
+
+# ---------- 朋友动态 ----------
+
+@page /friends (朋友) extends PosecraftLayout {
+  @icon TeamOutlined
+  @meta title="朋友动态"
+
+  @slot main {
+    @list 朋友作品流 {
+      @api GET /posecraft/v1/works (sort: friends) -> works
+      @note 朋友的作品动态流
+      @note 朋友 = 互相关注的用户
+
+      @loading {
+        @skeleton 卡片骨架 (count: 8)
+      }
+
+      @empty {
+        @empty 空状态 {
+          @icon 👥
+          @text 朋友还没有发布作品
+          @note 去邀请更多朋友加入 PoseCraft
+          @button 去推荐 {
+            @navigate click -> /recommend
+          }
+        }
+      }
+
+      @card 作品卡片 (v-for: item in works) {
+        @prop item: Work
+
+        @media 封面 (bind: item.cover_url)
+        @text 标题 (bind: item.title)
+
+        @author 作者信息 {
+          @avatar 头像 (bind: item.author.avatar) {
+            @navigate click -> /user/:id
+          }
+          @text 作者名 (bind: item.author.username)
+        }
+
+        @action 操作栏 {
+          @button 点赞 {
+            @api POST /posecraft/v1/works/:id/like
+            @api POST /posecraft/v1/interaction/like
+            @login
+          }
+          @button 收藏 {
+            @api POST /posecraft/v1/interaction/collect
+            @login
+          }
+        }
+
+        @navigate click -> /work/:id
+      }
+
+      @button 加载更多 {
+        @api GET /posecraft/v1/works (sort: friends, page: nextPage) -> works(append)
+        @render when: hasMore
+        @note IntersectionObserver 自动触发
+      }
+
+      @text 没有更多了 {
+        @render when: !hasMore && works.length > 0
+      }
+    }
+  }
+}

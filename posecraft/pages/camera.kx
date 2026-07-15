@@ -1,0 +1,157 @@
+# ==================== 相机拍摄页面 ====================
+#
+# 基于源码: posecraft/src/views/CameraView.vue
+#
+# 全屏相机取景 + Fabric.js 姿势模板叠加 + Base64 上传
+#
+# 页面结构：
+#   顶部导航栏（返回 + 切换摄像头）
+#   + 全屏 video 相机画面
+#   + Fabric.js 画布叠加层（仅渲染骨架 line + circle，隐私安全）
+#   + 底部拍照按钮（圆形快门）
+#   + 闪光动效 + 上传进度遮罩
+#
+# 关键交互：
+#   - 从 URL ?template_id=xxx 加载模板
+#   - 模板隐私保护：仅渲染骨架图形（line + circle），绝不加载原图
+#   - 模板适配算法：按设计稿宽高等比缩放（取短边），居中平移
+#   - 拍照流程：截图 → Base64 → 上传 → 创建作品 → 跳转详情
+#   - 闪光动效：拍照瞬间全屏白色闪烁
+#   - 切换摄像头：前置/后置切换
+#   - @permission posecraft:work:create + @login
+
+@page /camera (拍照创作) extends PosecraftLayout {
+  @icon CameraOutlined
+  @meta title="拍照创作"
+
+  @permission posecraft:work:create
+  @login
+
+  @slot main {
+    @detail 相机取景器 {
+      @note 全屏布局 h-screen w-screen，黑色背景
+
+      // ========== 路由参数：加载姿势模板 ==========
+      @param template_id: string { from: query }
+      @note 如果 URL 带 ?template_id=xxx，叠加该姿势模板
+      @note 来源：从作品详情页「使用此姿势拍照」跳转
+
+      // ========== 顶部导航条 ==========
+      // 来源: CameraView.vue — 绝对定位，渐变黑色半透明背景
+      @header 顶部栏 {
+        @note absolute top-0，高度 h-14，z-50
+        @note 背景渐变 from-black/60 to-transparent
+
+        @button 返回 {
+          @navigate click -> /
+          @note 返回首页，白色文字 + 左箭头图标
+        }
+        @button 切换摄像头 {
+          @note 前置/后置摄像头切换
+          @note 使用 camera.switchCamera()
+          @note 图标：循环箭头
+        }
+      }
+
+      // ========== 相机画面 ==========
+      @media 相机取景画面 {
+        @note 全屏 video 元素
+        @note 使用 getUserMedia API 获取摄像头流
+        @note autoplay playsinline object-cover
+        @note 使用 useCamera composable 管理
+
+        // --- 模板骨架叠加层 ---
+        // 来源: CameraView.vue — Fabric.js 画布绝对居中覆盖
+        @media 姿势骨架叠加 {
+          @render when: template_id
+          @note 绝对居中覆盖，pointer-events: none
+          @note 画布尺寸 = 屏幕物理尺寸 (window.innerWidth/Height)
+
+          // 加载模板数据
+          @api GET /posecraft/v1/templates/:id (params: { camera: true }) -> template
+          @note camera=true 表示仅获取骨架数据，不返回原图
+
+          @note 隐私安全渲染：
+          @note 1. 深度克隆并清洗 fabricData
+          @note 2. 移除所有 image 类型对象（原图）
+          @note 3. 移除 backgroundImage（背景图）
+          @note 4. 仅保留 line + circle（骨架线条和节点）
+          @note 5. 保障模板机密数据安全
+
+          // 模板适配算法
+          @note 算法步骤：
+          @note 1. 获取设计稿尺寸 (poseData.fabricData.vw, vh)
+          @note 2. 计算缩放比例：scale = min(screenW/designW, screenH/designH)
+          @note 3. 居中平移：offsetX = (screenW - designW*scale) / 2
+          @note 4. 应用 transform 到所有骨架对象
+          @note 5. fCanvas.renderAll() 渲染
+
+          @note 错误处理：
+          @note - 无 pose_data → 显示红色错误文本 + alert
+          @note - 无 fabricData → 提示"该模板不包含骨架数据"
+        }
+
+        // --- 无模板时的纯相机模式 ---
+        @media 纯相机模式 {
+          @render when: !template_id
+          @note 无模板叠加，仅显示相机画面
+        }
+      }
+
+      // ========== 底部控制栏 ==========
+      // 来源: CameraView.vue — 绝对定位底部，渐变背景
+      @action 底部控制栏 {
+        @note absolute bottom-0，高度 h-32
+        @note 背景渐变 from-black/80 to-transparent
+
+        @button 拍照 {
+          @note 圆形快门按钮：w-20 h-20，白色边框
+          @note 内圆 w-[60px] h-[60px] 白色
+          @note active:scale-95 缩放反馈
+          @note disabled 时不可点击（上传中）
+
+          // --- 拍照闪光动效 ---
+          @detail 闪光效果 {
+            @render when: isFlashing
+            @note 拍照瞬间全屏白色闪烁
+            @note animate-pulse 动画
+            @state isFlashing: boolean = false
+          }
+
+          // --- 上传处理流程 ---
+          @note 步骤 1: 从 video 元素截取当前帧
+          @note 步骤 2: 绘制到 canvas → toDataURL('image/jpeg') 获取 Base64
+          @note 步骤 3: 调用 uploadBase64 上传
+          @api POST /posecraft/v1/upload/base64 (body: {
+            data: base64,
+            filename: `capture_${uuid}.jpg`,
+            path: 'posecraft'
+          })
+          @note 上传进度: onUploadProgress 回调
+          @note 使用独立 axios 实例（不经过 service 拦截器）
+
+          // --- 创建作品 ---
+          @api POST /posecraft/v1/works (body: {
+            image_url: uploadResult.url,
+            template_id: templateId,
+            title: `拍照作品_${Date.now()}`
+          })
+          @note 创建新作品记录
+
+          // --- 跳转详情页 ---
+          @navigate success -> /work/:id
+          @note 拍照成功后跳转到作品详情页
+          @note 同时记录浏览历史
+        }
+      }
+
+      // ========== 上传进度遮罩 ==========
+      @loading {
+        @note 全屏半透明遮罩 bg-black/50 z-30
+        @note 居中 spinner + "照片处理中..." 文字
+        @note 上传过程中显示
+        @toast 上传中
+      }
+    }
+  }
+}

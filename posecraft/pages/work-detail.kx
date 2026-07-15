@@ -1,0 +1,372 @@
+# ==================== 作品 / 模板详情页 ====================
+#
+# 基于源码: posecraft/src/views/WorkDetail.vue
+#
+# 沉浸式左图右社媒布局：
+#   左侧：图片浏览区（底图 + 骨架叠加 + 透明度控制 + 滚轮缩放）
+#   右侧：社区信息流（作者卡 + 标题/描述/标签/元数据 + AI分析 + 评论 + 互动栏）
+#
+# 支持作品与模板两种详情：
+#   根据路由自动判断 isTemplate（路径以 /template 开头）
+#   共享同一个 WorkDetail.vue 组件
+#
+# 关键交互：
+#   - 骨架叠加：点开详情时才加载模板的 thumbnail_url（骨架 PNG）
+#   - 透明度控制：拖动滑块调整底图不透明度 (0-1)，默认 0.5
+#   - 容器比例：有 edit_data 时按设计稿比例锁定 (aspectRatio: vw / vh)
+#   - 图片缩放：鼠标滚轮缩放主图
+#   - 描述折叠：超出显示"展开/收起"
+#   - 关注/取关：实时切换按钮状态
+#   - 点赞脉冲：点赞时有 pulse 动画
+#   - 使用模板拍照：跳转到相机页面
+#   - 评论本地状态：前端维护 comments 数组
+#   - 作者更多菜单：编辑/删除（仅作者本人）
+#   - Toast 提示：操作反馈
+
+@page /work/:id (作品详情) extends PosecraftLayout {
+  @icon EyeOutlined
+  @meta title="作品详情"
+
+  @param id: string { from: route }
+
+  @slot main {
+    @detail 作品详情 {
+      @note 来源: WorkDetail.vue — 沉浸式布局
+
+      // ========== 顶部返回条 ==========
+      @button 返回 {
+        @navigate click -> back
+        @note 固定定位左上角，圆形按钮
+      }
+
+      // ========== 主体布局 ==========
+      @detail 主体 {
+        @note 双栏布局：media-pane (flex:1) + social-pane (360px)
+
+        // ---------- 左侧：沉浸图片浏览区 ----------
+        @media 图片浏览区 {
+          @api GET /posecraft/v1/works/:id (bind: id) -> work
+
+          @loading { @skeleton 全屏骨架 (count: 1) }
+
+          @note 容器比例锁定：
+          @note 有 edit_data → aspectRatio: vw/vh（设计稿比例）
+          @note 无 edit_data → width: 100%（自适应）
+
+          // 主图
+          @media 主图 (bind: work.image_url) {
+            @note 支持鼠标滚轮缩放
+            @note 透明度受 photoOpacity 控制（骨架叠加时）
+            @state photoOpacity: number = 0.5
+            @note 无底图时显示「纯姿势骨骼模板」占位
+          }
+
+          // 视频展示
+          @media 视频 (bind: work.video_url) {
+            @render when: work.video_url
+          }
+
+          // 骨架叠加
+          @media 骨架叠加 {
+            @render when: showOverlay && templateSkeletonUrl
+            @note 来源：模板详情时加载 thumbnail_url（骨架 PNG）
+            @note 仅点开详情时才加载（lazy load）
+            @note 位置：根据 edit_data 的 scale/offsetX/offsetY 定位
+            @note 绝对定位，覆盖在主图上方
+          }
+
+          // 骨架叠加浮动控制
+          @action 骨架叠加控制 {
+            @render when: templateSkeletonUrl
+            @note 浮动胶囊按钮，绝对定位右下角
+
+            @button 显示骨骼 {
+              @note 开启/关闭骨架 PNG 叠加
+              @state showOverlay: boolean = true
+              @note 图标 ✨ + "隐藏骨骼"/"显示骨骼"
+              @note 激活态红色高亮
+            }
+            @input 透明度 {
+              @render when: showOverlay && work.image_url
+              @note 拖动滑块调整底图不透明度 (step: 0.05)
+              @note 范围: 0-1，默认 0.5
+            }
+          }
+        }
+
+        // ---------- 右侧：社区信息流 ----------
+        @social 社区信息流 {
+
+          // --- 作者信息卡 ---
+          @author 作者信息卡 {
+            @api GET /posecraft/v1/profile/stats/:uid (bind: work.author.id) -> authorStats
+
+            @avatar 作者头像 (bind: work.author.avatar) {
+              @hover -> @popover 作者悬浮卡
+              @navigate click -> /user/:id
+            }
+            @text 作者名 (bind: work.author.username)
+            @text 粉丝数 (bind: authorStats.followers)
+            @text 作品数 (bind: authorStats.works)
+
+            @button 关注 {
+              @render when: !isOwner
+              @api POST /posecraft/v1/follow/:userId (bind: work.author.id)
+              @api GET /posecraft/v1/follow/status/:userId -> isFollowing
+              @login
+              @note 关注后推送该作者新作品通知
+            }
+            @button 已关注 {
+              @render when: !isOwner && isFollowing
+              @api DELETE /posecraft/v1/follow/:userId (bind: work.author.id)
+            }
+
+            // 作者更多菜单
+            @button 更多 {
+              @render when: isOwner
+              @note 仅作者本人显示
+              @menu 编辑 {
+                @navigate click -> /editor?id=:id
+              }
+              @menu 删除 {
+                @api DELETE /posecraft/v1/works/:id
+                @note 删除后跳转首页
+                @navigate success -> /
+              }
+            }
+          }
+
+          // --- 标题和描述 ---
+          @text 标题 (bind: work.title)
+
+          @text 描述 (bind: work.description) {
+            @note 超出折叠，显示"展开/收起"按钮
+            @state descCollapsed: boolean = true
+            @note 自动检测是否溢出 (descOverflow)
+          }
+
+          // --- 标签 ---
+          @badge 标签 (bind: work.tags) {
+            @note 每个 tag 显示为 #tag 药丸样式
+            @note 支持数组或单个字符串
+          }
+
+          // --- 元数据行 ---
+          @text 浏览数 (bind: work.views_count) {
+            @note 👁 图标前缀
+          }
+          @text 发布时间 (bind: work.created_at)
+          @text 距离 (bind: work.distance) {
+            @render when: work.distance
+            @note 📍 图标前缀
+          }
+
+          // --- 使用模板拍照 CTA ---
+          @button 使用此姿势拍照 {
+            @render when: work.isTemplate || work.template_id
+            @navigate click -> /camera?template_id=:id
+            @note 跳转到相机页面并叠加该模板
+            @note 图标 📸 + 右箭头
+          }
+
+          // --- 使用同款姿势拍摄 ---
+          @button 使用同款姿势拍摄 {
+            @render when: !work.isTemplate && work.template_id
+            @navigate click -> /camera?template_id=:id
+          }
+
+          // ---------- AI 人体特征（折叠） ----------
+          @detail AI分析数据 {
+            @render when: work.analysis_data
+            @note 折叠展示，点击展开查看 JSON 数据
+            @note 来源: analysis_data 字段（JSON）
+
+            @summary 🤖 AI 人体特征数据
+
+            @text 结构化数据 {
+              @note 如果 analysis_data 是 object，以 grid 展示键值对
+            }
+            @text 原始数据 {
+              @note 否则以 <pre> 展示 JSON.stringify 格式化
+            }
+          }
+
+          // ---------- 互动栏 ----------
+          @action 互动栏 {
+            @note sticky bottom（移动端/桌面端侧边）
+
+            @button 点赞 (bind: work.likes_count) {
+              @api POST /posecraft/v1/works/:id/like
+              @api POST /posecraft/v1/interaction/like
+              @mutation set work.likes_count += 1
+              @login
+              @note 点赞时有脉冲动画 (pulse)
+              @note 已点赞 ❤️ 红色 / 未点赞 🤍 空心
+            }
+            @button 收藏 (bind: work.collects_count) {
+              @api POST /posecraft/v1/interaction/collect
+              @login
+              @note 已收藏 ⭐ 黄色 / 未收藏 ☆ 空心
+            }
+            @button 评论 (bind: work.comments_count) {
+              @note 滚动到评论区
+            }
+            @button 分享 {
+              @note 分享功能（复制链接/社交媒体）
+            }
+          }
+
+          // ---------- 评论区 ----------
+          @list 评论列表 {
+            @text 评论标题 (bind: work.comments_count)
+
+            @input 评论输入框 {
+              @note 说点什么吧... 按 Enter 发送
+              @placeholder 说点什么吧...
+            }
+            @button 发送 {
+              @api POST /posecraft/v1/interaction/comment
+              @login
+              @note 发送后清空输入框，添加到列表头部
+            }
+
+            @card 评论项 (v-for: comment in comments) {
+              @prop comment: Comment
+              @avatar 评论者头像 (bind: comment.author)
+              @note 取首字母大写作为头像
+              @text 评论者名 (bind: comment.author)
+              @text 评论内容 (bind: comment.text)
+              @text 评论时间 (bind: comment.created_at)
+            }
+
+            @empty {
+              @text 💬 还没有人评论，快来抢沙发
+            }
+
+            @note 评论本地状态管理：
+            @note - comments 是 ref 数组
+            @note - commentIdSeq 自增 ID
+            @comment 后端接入前为前端本地状态
+          }
+        }
+      }
+    }
+  }
+}
+
+# ==================== 模板详情（共享布局） ====================
+# 来源: WorkDetail.vue — isTemplate 为 true 时的变体
+
+@page /template/:id (模板详情) extends PosecraftLayout {
+  @icon FileImageOutlined
+  @meta title="模板详情"
+
+  @param id: string { from: route }
+
+  @slot main {
+    @detail 模板详情 {
+      @api GET /posecraft/v1/templates/:id (bind: id) -> work
+      @note 与作品详情共享组件，isTemplate = true
+      @note 接口调用 templateApi.getDetail 而非 workApi.getDetail
+
+      @media 图片浏览区 {
+        @media 主图 (bind: work.image_url)
+        @media 视频 (bind: work.video_url) {
+          @render when: work.video_url
+        }
+        @media 骨架叠加 {
+          @note 模板详情始终有 skeleton PNG
+        }
+      }
+
+      @author 作者信息卡 {
+        @avatar 作者头像 (bind: work.author.avatar) {
+          @hover -> @popover 作者悬浮卡
+          @navigate click -> /user/:id
+        }
+        @text 作者名 (bind: work.author.username)
+        @text 粉丝数 (bind: work.author.stats.followers)
+        @text 作品数 (bind: work.author.stats.works)
+
+        @button 关注 {
+          @api POST /posecraft/v1/follow/:userId (bind: work.author.id)
+          @api GET /posecraft/v1/follow/status/:userId -> isFollowing
+          @login
+        }
+        @button 已关注 {
+          @render when: isFollowing
+          @api DELETE /posecraft/v1/follow/:userId (bind: work.author.id)
+        }
+      }
+
+      @text 标题 (bind: work.title)
+      @text 描述 (bind: work.description)
+
+      @badge 热门 { @render when: work.hot_score > 80 }
+      @badge 独家 { @render when: work.is_exclusive }
+      @badge 模板 { @note 始终显示「模板」标签 }
+
+      @text 使用次数 (bind: work.uses_count)
+      @text 点赞数 (bind: work.likes_count)
+
+      @action 互动栏 {
+        @button 点赞 {
+          @api POST /posecraft/v1/works/:id/like
+          @api POST /posecraft/v1/interaction/like
+          @login
+        }
+        @button 收藏 {
+          @api POST /posecraft/v1/interaction/collect
+          @login
+        }
+        @button 推荐 {
+          @api POST /posecraft/v1/templates/:id/recommend
+          @api GET /posecraft/v1/recommendations/status -> isRecommended
+          @login
+        }
+        @button 取消推荐 {
+          @render when: isRecommended
+          @api DELETE /posecraft/v1/templates/:id/recommend
+          @login
+        }
+        @button 分享
+      }
+
+      @button 使用此姿势拍照 {
+        @navigate click -> /camera?template_id=:id
+        @note 跳转到相机页面并叠加该模板
+      }
+
+      @list 评论列表 {
+        @input 评论输入框
+        @button 发送 {
+          @api POST /posecraft/v1/interaction/comment
+          @login
+        }
+
+        @card 评论项 (v-for: comment in comments) {
+          @prop comment: Comment
+          @avatar 评论者头像 (bind: comment.author)
+          @text 评论内容 (bind: comment.text)
+          @text 评论时间 (bind: comment.created_at)
+        }
+      }
+    }
+  }
+}
+
+# ==================== 全局共享浮窗 ====================
+
+@popover 作者悬浮卡 {
+  @note 作者头像悬停时显示
+  @prop author: User
+  @avatar 头像 (bind: author.avatar)
+  @text 用户名 (bind: author.name)
+  @text 签名 (bind: author.bio)
+  @stat 粉丝 (bind: author.stats.followers)
+  @stat 作品 (bind: author.stats.works)
+  @button 关注 {
+    @api POST /posecraft/v1/follow/:userId
+    @login
+  }
+}
