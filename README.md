@@ -37,7 +37,7 @@
 ## 快速上手
 
 ```kx
-@page /discover (发现页) extends PosecraftLayout {
+@page /discover (发现页) extends AppLayout {
   @icon SearchOutlined
   @meta title="发现" description="推荐热门作品与搜索结果"
 
@@ -51,7 +51,7 @@
     }
 
     @list 作品流 {
-      @api GET /posecraft/v1/works (query: page, keyword: searchQuery, tab: tab) -> works
+      @api GET /api/v1/works (query: page, keyword: searchQuery, tab: tab) -> works
       @render when: works.length > 0
 
       @card 作品卡片 (v-for: item in works) {
@@ -61,7 +61,7 @@
         @avatar 作者 (bind: item.author.avatar)
 
         @button 喜欢 {
-          @api POST /posecraft/v1/works/:id/like (body: { workId: item.id })
+          @api POST /api/v1/works/:id/like (body: { workId: item.id })
           @mutation set works.find(w => w.id === item.id).liked = true
           @login
         }
@@ -136,7 +136,7 @@
 ├── example.kx
 └── kx-lang-extension/
     ├── package.json
-    ├── syntaxes/posecraft-kx.tmLanguage.json
+    ├── syntaxes/kx.tmLanguage.json
     └── ...
 ```
 

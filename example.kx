@@ -1,4 +1,4 @@
-﻿@page /mine (我的空间) extends PosecraftLayout {
+﻿@page /mine (我的空间) extends AppLayout {
   @icon UserOutlined
   @meta title="我的空间" description="个人资料与作品管理"
 
@@ -24,7 +24,7 @@
     }
 
     @list 作品列表 {
-      @api GET /posecraft/v1/works/mine (query: page, pageSize) -> works
+      @api GET /api/v1/works/mine (query: page, pageSize) -> works
       @render when: works.length > 0
 
       @card 作品卡片 (v-for: item in works) {
@@ -42,7 +42,7 @@
             @modal 删除确认 {
               @text 确认删除作品？
               @button 确定 {
-                @api DELETE /posecraft/v1/works/:id (body: { id: item.id })
+                @api DELETE /api/v1/works/:id (body: { id: item.id })
                 @mutation filter works = works.filter(w => w.id !== item.id)
                 @toast "已删除"
               }

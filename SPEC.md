@@ -46,7 +46,7 @@
 支持：`extends` 继承布局。
 
 ```kx
-@page /editor (编辑器) extends PosecraftLayout {
+@page /editor (编辑器) extends AppLayout {
   @slot main { ... }
 }
 ```
@@ -180,7 +180,7 @@
 
 ## 三、扩展语法对齐
 
-`kx-lang-extension/syntaxes/posecraft-kx.tmLanguage.json` 当前支持以下关键词：
+`kx-lang-extension/syntaxes/kx.tmLanguage.json` 当前支持以下关键词：
 
 - `@page`, `@layout`, `@slot`
 - `@api`, `@navigate`, `@render`, `@permission`, `@login`
