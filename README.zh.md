@@ -23,55 +23,69 @@
 
 ## 快速上手
 
+### 第一步：阅读规范
+
+完整语法规范见 [SPEC.md](./SPEC.md)。
+
+### 第二步：创建项目目录结构
+
+```
+项目结构：
+├── guide/                      ← 需求与设计文档根目录
+│   ├── index.kx                ← 入口文件：@ref 引用所有文件
+│   ├── layouts/
+│   │   └── main.kx             ← 全局布局
+│   ├── pages/
+│   │   ├── home.kx             ← 首页
+│   │   ├── mine.kx             ← 个人中心
+│   │   └── detail.kx           ← 详情页
+│   ├── models/
+│   │   ├── user.kx             ← 数据模型：User
+│   │   ├── work.kx             ← 数据模型：Work
+│   │   └── api.kx              ← API 接口定义
+│   └── components/
+│       └── shared.kx           ← 共享组件（浮窗等）
+├── src/                        ← 代码目录（AI 生成）
+└── guide/style.md              ← 前端风格说明（配色、字体、间距）
+```
+
+### 第三步：用 @ref 串联文件
+
+在 `index.kx` 中通过 `@ref` 引用所有文件，AI 自动定位：
+
 ```kx
-@page /home (首页) extends AppLayout {
-  @icon HomeOutlined
-  @meta title="首页" description="发现最新作品"
+// index.kx — 项目入口
+@ref ./layouts/main.kx
+@ref ./pages/home.kx
+@ref ./pages/mine.kx
+@ref ./pages/detail.kx
+@ref ./models/user.kx
+@ref ./models/work.kx
+@ref ./models/api.kx
+@ref ./components/shared.kx
+```
 
-  @slot main {
-    @header 搜索栏 {
-      @input 搜索框 {
-        @api GET /api/v1/works (query: keyword) -> filteredItems
-      }
-    }
+### 第四步：编写 `.kx` 文件
 
-    @list 作品流 {
-      @api GET /api/v1/works (query: page, tab: activeTab) -> works
+按目录分类编写各模块文件，`models/` 下定义数据模型：
 
-      @loading { @skeleton 卡片骨架 (count: 8) }
+```kx
+// models/user.kx
+@model User {
+  @field id: number
+  @field username: string
+  @field avatar: string
+  @field role: string
+}
 
-      @empty {
-        @empty 空状态 {
-          @text 暂无作品
-          @button 返回首页 { @navigate click -> / }
-        }
-      }
-
-      @card 作品卡片 (v-for: item in works) {
-        @prop item: Work
-        @media 封面 (bind: item.cover_url)
-        @text 标题 (bind: item.title)
-        @avatar 作者 (bind: item.author.avatar)
-
-        @button 点赞 (bind: item.likes_count) {
-          @api POST /api/v1/works/:id/like
-          @mutation set works.find(w => w.id === id).likes_count += 1
-          @login
-        }
-
-        @hover -> @popover 作品预览
-      }
-
-      @button 加载更多 {
-        @api GET /api/v1/works (page: nextPage) -> works(append)
-        @render when: hasMore
-      }
-    }
-  }
+// models/api.kx
+@model API {
+  @api GET /api/v1/works -> works
+  @api POST /api/v1/works/:id/like -> void
 }
 ```
 
-AI 自动生成：`HomeView.vue`、`WorkCard.vue`、`api/works.ts`、`router/index.ts`。
+### 第五步：投喂给 AI
 
 ---
 
@@ -163,11 +177,12 @@ AI 自动生成：`HomeView.vue`、`WorkCard.vue`、`api/works.ts`、`router/ind
 ## 写作规范
 
 1. 一个 `.kx` 文件对应一个页面或独立模块。
-2. 用 `@note` 显式记录业务规则 — AI 将其视为强制约束。
-3. 用 `@api -> state`、`@mutation`、`@sync` 保持数据流显式。
-4. 每个 `@list` 内部使用 `@loading` / `@empty` / `@error` 状态容器。
-5. 需要登录的操作或内容添加 `@login`。
-6. 交互逻辑（悬浮、弹窗、导航）用 `@hover` / `@popover` / `@navigate`。
+2. 用 `@ref` 在 `index.kx` 中引用所有文件，AI 据此自动定位。
+3. 用 `@note` 显式记录业务规则 — AI 将其视为强制约束。
+4. 用 `@api -> state`、`@mutation`、`@sync` 保持数据流显式。
+5. 每个 `@list` 内部使用 `@loading` / `@empty` / `@error` 状态容器。
+6. 需要登录的操作或内容添加 `@login`。
+7. 交互逻辑（悬浮、弹窗、导航）用 `@hover` / `@popover` / `@navigate`。
 
 ---
 

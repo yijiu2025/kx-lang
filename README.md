@@ -162,20 +162,45 @@ code --install-extension kx-lang-extension/kx-lang-extension-0.0.1.vsix
 
 - [SPEC.md](SPEC.md) — 完整语法规范 + AI 生成映射表（30+ 条映射规则）
 
-### 第三步：编写你的第一个 `.kx` 文件
+### 第三步：创建项目目录结构
 
 ```
 项目结构：
-├── layouts/app.kx          ← 全局布局
-├── pages/
-│   ├── home.kx             ← 首页
-│   ├── mine.kx             ← 个人中心
-│   └── detail.kx           ← 详情页
-└── components/
-    └── shared.kx           ← 公共组件定义
+├── guide/                      ← 需求与设计文档根目录
+│   ├── index.kx                ← 入口文件：@ref 引用所有文件
+│   ├── layouts/
+│   │   └── main.kx             ← 全局布局
+│   ├── pages/
+│   │   ├── home.kx             ← 首页
+│   │   ├── mine.kx             ← 个人中心
+│   │   └── detail.kx           ← 详情页
+│   ├── models/
+│   │   ├── user.kx             ← 数据模型：User
+│   │   ├── work.kx             ← 数据模型：Work
+│   │   └── api.kx              ← API 接口定义
+│   └── components/
+│       └── shared.kx           ← 共享组件（浮窗等）
+├── src/                        ← 代码目录（AI 生成）
+└── guide/style.md              ← 前端风格说明（配色、字体、间距）
 ```
 
-### 第四步：投喂给 AI
+### 第四步：用 @ref 串联文件
+
+在 `index.kx` 中通过 `@ref` 引用所有文件，AI 自动定位：
+
+```kx
+// index.kx — 项目入口
+@ref ./layouts/main.kx
+@ref ./pages/home.kx
+@ref ./pages/mine.kx
+@ref ./pages/detail.kx
+@ref ./models/user.kx
+@ref ./models/work.kx
+@ref ./models/api.kx
+@ref ./components/shared.kx
+```
+
+### 第五步：投喂给 AI
 
 将 `.kx` 文件 + `SPEC.md` 放入 Cursor / Claude 上下文，然后说：
 

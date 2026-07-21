@@ -18,6 +18,67 @@ This repository contains the KX specification, examples, and guidance for using 
 
 ## Quick Start
 
+### Step 1: Read the Spec
+
+Full specification in [SPEC.md](./SPEC.md).
+
+### Step 2: Create Project Structure
+
+```
+project/
+├── guide/                      ← Design documents root
+│   ├── index.kx                ← Entry: @ref all files
+│   ├── layouts/
+│   │   └── main.kx             ← Global layout
+│   ├── pages/
+│   │   ├── home.kx             ← Home page
+│   │   ├── mine.kx             ← Profile page
+│   │   └── detail.kx           ← Detail page
+│   ├── models/
+│   │   ├── user.kx             ← User model
+│   │   ├── work.kx             ← Work model
+│   │   └── api.kx              ← API definitions
+│   └── components/
+│       └── shared.kx           ← Shared components
+├── src/                        ← Code (AI generated)
+└── guide/style.md              ← Style guide
+```
+
+### Step 3: Link Files with @ref
+
+```kx
+// index.kx — project entry
+@ref ./layouts/main.kx
+@ref ./pages/home.kx
+@ref ./pages/mine.kx
+@ref ./pages/detail.kx
+@ref ./models/user.kx
+@ref ./models/work.kx
+@ref ./models/api.kx
+@ref ./components/shared.kx
+```
+
+### Step 4: Write .kx Files
+
+Define data models in `models/`:
+
+```kx
+// models/user.kx
+@model User {
+  @field id: number
+  @field username: string
+  @field avatar: string
+}
+
+// models/api.kx
+@model API {
+  @api GET /api/v1/works -> works
+  @api POST /api/v1/works/:id/like -> void
+}
+```
+
+### Step 5: Feed to AI
+
 A minimal working `.kx` file:
 
 ```kx
@@ -267,11 +328,12 @@ More practical examples in [example.kx](example.kx).
 ## Best Practices
 
 1. **Single responsibility**: one `.kx` file per page or reusable module.
-2. **Explicit business rules**: use `@note` to make constraints visible and actionable for AI.
-3. **No hidden logic**: do not bury behavior in comments; write interactions and state clearly.
-4. **Name with intent**: name blocks by purpose, not implementation detail.
-5. **Visible API contracts**: declare `@api` and `@mutation` near the component that triggers them.
-6. **Colocate state**: define state and its mutations in the same scope or nearest parent.
+2. **Cross-reference**: use `@ref` in `index.kx` to link all files — AI resolves them automatically.
+3. **Explicit business rules**: use `@note` to make constraints visible and actionable for AI.
+4. **No hidden logic**: do not bury behavior in comments; write interactions and state clearly.
+5. **Name with intent**: name blocks by purpose, not implementation detail.
+6. **Visible API contracts**: declare `@api` and `@mutation` near the component that triggers them.
+7. **Colocate state**: define state and its mutations in the same scope or nearest parent.
 
 ---
 

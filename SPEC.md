@@ -25,7 +25,30 @@
 
 `@note` 与普通注释不同——它是**业务约束声明**，生成器必须将其视为实现依据。
 
-### 2. 页面与布局
+### 2. 文件引用（@ref）
+
+```kx
+@ref ./models/user.kx          // 文件级：引用模型文件
+@ref ./components/modals.kx    // 文件级：引用组件文件
+```
+
+```kx
+@button 打开弹窗 {
+  @ref ./components/modals.kx  // 内联级：在组件内部引用
+  @navigate click -> @ref
+}
+```
+
+`@ref` 用于跨文件引用，支持两种方式：
+
+| 方式 | 位置 | 用途 |
+|------|------|------|
+| 文件级 | 文件顶部 | 声明该文件依赖的模型、布局、组件 |
+| 内联级 | 组件内部 | 按钮打开弹窗、面板引用 API 定义等 |
+
+`@navigate click -> @ref` 表示点击时导航到引用文件的内容。
+
+### 3. 页面与布局
 
 ```kx
 @page /path (标题) extends AppLayout {
@@ -54,6 +77,12 @@
 ### 3. 数据声明
 
 ```kx
+@model User {                      // 数据模型定义
+  @field id: number
+  @field username: string
+  @field avatar: string
+}
+
 @state page: number = 1               // 页面级响应式状态
 @prop item: Work                       // 组件 prop 类型声明
 @param id: string { from: route }     // 路由参数（route / query）
@@ -61,9 +90,12 @@
 @param template_id: string { from: query }
 ```
 
+- `@model`：声明数据模型，包含多个 `@field` 字段，放在 `models/` 目录下。
+- `@field`：模型内的字段定义，格式 `@field 字段名: 类型`。
 - `@state`：声明响应式变量，支持 `string | number | boolean | object | array` 类型。
 - `@prop`：声明组件接收的 props（用于循环内子组件）。
 - `@param`：声明路由参数来源（`from: route` 路径参数，`from: query` 查询参数）。
+- `@model` 定义在独立的 `models/*.kx` 文件中，通过 `@ref` 被页面引用。
 
 ### 4. 数据交互
 
@@ -440,6 +472,9 @@
 |:---|:---|
 | `@page /path (标题) extends Layout` | `router.ts` 路由 + `<router-view>` + 布局组件 |
 | `@layout Name { @slot main }` | Vue SFC 布局组件 + `<slot name="main">` |
+| `@ref ./path/to/file.kx` | 加载文件，注入类型和组件定义，等价于 `import` |
+| `@model Name { @field id: type }` | TypeScript 类型定义 `interface Name { id: type }` |
+| `@field name: type` | 接口字段 `name: type` |
 | `@header` | `<header>` sticky 顶部 |
 | `@sidebar` | `<aside>` 固定宽度侧边栏 |
 | `@avatar (bind: url)` | `<img>` + 圆形样式 |
@@ -491,22 +526,166 @@
 
 ## 四、文件组织
 
+### 4.1 目录结构
+
 ```
-project/
-├── app.kx                  # 全局布局 + 全局浮窗
-├── pages/
-│   ├── home.kx             # 首页频道
-│   ├── work-detail.kx      # 详情 + 浮窗
-│   ├── editor.kx           # 编辑器
-│   ├── camera.kx           # 相机页
-│   ├── login.kx            # 登录页
-│   ├── mine.kx             # 我的空间
-│   └── following_friends.kx # 关注/朋友
-└── layouts/               # 可选：独立布局文件
-    └── AppLayout.kx
+<项目名>/
+└── guide/                     # 需求与设计文档根目录
+    ├── index.kx               # 项目入口文件：概述、数据模型、API 总览、文件引用
+    ├── layouts/               # 布局文件目录
+    │   ├── main.kx            # 主布局
+    │   └── auth.kx            # 登录/注册布局
+    ├── pages/                 # 页面文件目录
+    │   ├── home.kx            # 首页（对应 @page /）
+    │   ├── detail.kx          # 详情页（对应 @page /:id）
+    │   ├── editor.kx          # 编辑器页
+    │   └── login.kx           # 登录页
+    ├── models/                # 数据模型定义目录
+    │   ├── user.kx            # 用户模型
+    │   ├── work.kx            # 作品模型
+    │   └── api.kx             # API 接口定义
+    └── components/            # 共享组件定义目录
+        ├── popovers.kx        # 全局浮窗/悬浮卡
+        └── shared.kx          # 跨页面通用组件
 ```
 
-**约定**：一个 `.kx` 文件对应一个页面或一个独立模块；`app.kx` 为全局架构入口。
+### 4.2 文件间引用（@ref）
+
+不同 `.kx` 文件之间通过 `@ref` 指令相互引用，AI 根据 `@ref` 路径自动定位到对应文件。
+
+**两种使用方式：**
+
+| 方式 | 位置 | 示例 | 用途 |
+|------|------|------|------|
+| 文件级 | 文件顶部（推荐） | `@ref ./models/work.kx` | 声明该文件依赖的模型、布局 |
+| 内联级 | 任意组件内部 | `@ref ./models/work.kx` | 在特定组件上下文中引用模型 |
+
+**文件级引用**（在文件顶部统一声明所有依赖）：
+
+```kx
+// pages/home.kx
+@ref ../layouts/main.kx      // 引用主布局
+@ref ../models/work.kx       // 使用 Work 模型
+```
+
+**内联级引用**（在组件内部引用，AI 在该组件上下文中加载对应文件）：
+
+```kx
+@button 管理模型 {
+  @ref ./models/work.kx         // 加载 work.kx 模型文件，按钮可操作该模型
+  @navigate click -> @ref       // 打开引用文件内容
+}
+```
+
+```kx
+@button 打开弹窗 {
+  @ref ./components/modals.kx   // 加载弹窗组件文件
+  @navigate click -> @ref       // 点击时打开该弹窗
+}
+```
+
+```kx
+@modal 编辑作品 {
+  @ref ../models/work.kx        // 弹窗内引用模型
+  @form 编辑表单 { ... }
+}
+```
+
+> 内联 `@ref` 适用于：按钮打开弹窗、按钮关联数据模型、面板引用 API 定义等场景。`@navigate click -> @ref` 表示点击时导航到引用文件。AI 在解析该组件时自动加载对应文件。
+
+### 4.3 文件职责划分
+
+| 文件 | 内容 | 示例 |
+|------|------|------|
+| `index.kx` | 项目概述、数据模型总览、API 总览、所有 `@ref` 引用 | 项目全局入口 |
+| `layouts/*.kx` | 布局定义（`@layout`）、全局插槽 | 主布局、侧边栏、顶栏 |
+| `pages/*.kx` | 页面定义（`@page`）、路由、页面组件 | 首页、详情页等 |
+| `models/*.kx` | 数据模型（`@model`）、字段定义、关联关系 | User、Work 模型 |
+| `components/*.kx` | 共享组件（`@popover`、`@card` 等） | 全局浮窗、通用组件 |
+
+### 4.4 数据模型定义（@model）
+
+在 `models/` 目录下的 `.kx` 文件中定义数据结构：
+
+```kx
+// models/user.kx
+@model User {
+  @field id: number             // 用户 ID
+  @field username: string       // 用户名
+  @field avatar: string         // 头像 URL
+  @field role: string           // 角色
+  @field created_at: string     // 创建时间
+}
+
+@model Work {
+  @field id: number
+  @field title: string          // 作品标题
+  @field cover_url: string      // 封面图
+  @field author: User           // 关联 User 模型
+  @field likes_count: number
+  @field status: number         // 状态：1公开 0私密
+}
+```
+
+### 4.5 API 定义（@api）
+
+在 `models/api.kx` 中集中定义所有 API 接口：
+
+```kx
+// models/api.kx
+@model API {
+  // 作品相关
+  @api GET /api/v1/works (query: page, pageSize, channel) -> works
+  @api GET /api/v1/works/:id (bind: id) -> work
+  @api POST /api/v1/works/:id/like -> void
+
+  // 用户相关
+  @api GET /api/v1/user/profile -> userProfile
+  @api POST /api/v1/auth/login -> token
+
+  // 配置相关
+  @api GET /api/v1/config/channels -> channels
+}
+```
+
+### 4.6 首页入口示例（index.kx）
+
+```kx
+// ============================================================
+// 项目：PoseCraft
+// 描述：3D 角色姿势分享平台
+// ============================================================
+
+@note 项目入口文件，所有页面和模型在此引用
+
+@ref ./layouts/main.kx
+@ref ./pages/home.kx
+@ref ./pages/detail.kx
+@ref ./pages/editor.kx
+@ref ./pages/login.kx
+@ref ./models/user.kx
+@ref ./models/work.kx
+@ref ./models/api.kx
+
+@note 数据模型总览：
+//  User  - 用户（username, avatar, role）
+//  Work  - 作品（title, cover_url, author → User, likes_count）
+//  API   - 接口定义
+
+@note 路由总览：
+//  /             → home.kx      首页
+//  /work/:id     → detail.kx    详情页
+//  /editor       → editor.kx    编辑器
+//  /login        → login.kx     登录页
+```
+
+### 4.7 约定
+
+- **一个 `.kx` 文件对应一个页面或一个独立模块**
+- **`index.kx`** 为项目入口文件，包含所有 `@ref` 引用
+- **`models/`** 目录下定义数据模型和 API，通过 `@ref` 被页面引用
+- **`@ref`** 路径相对于当前文件，使用 Unix 路径格式（`./`、`../`）
+- AI 根据 `@ref` 自动加载对应文件，无需手动指定
 
 ---
 
